@@ -1,0 +1,78 @@
+Parameters:
+  EnvironmentName:
+    Type: String
+Resources:
+  # Creating Security Groups
+  LBSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to load balancer
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${EnvironmentName}-VPCID"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name 
+          Value: !Sub ${EnvironmentName} Load Balancer Security Group
+  WebServerSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to servers and SSH from local only
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${EnvironmentName}-VPCID"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      # TODO:  We will replace it with jump box (bastion server)
+      # - IpProtocol: tcp
+      #   FromPort: 22
+      #   ToPort: 22
+      #   CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 0
+        ToPort: 65535
+        CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name 
+          Value: !Sub ${EnvironmentName} Servers Security Group
+
+  #launch configuration
+  WebAppLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          apt-get update -y
+          apt-get install apache2 -y
+          systemctl start apache2.service
+          cd /var/www/html
+          #TODO: To be replaced with fetching the data from s3 bucket 
+          echo "it works! Udagram, Udacity" > index.html
+      ImageId: ami-0729e439b6769d6ab
+      KeyName: udagramServersKey
+      SecurityGroups:
+      - Ref: WebServerSecGroup
+      InstanceType: t3.medium
+      BlockDeviceMappings:
+      - DeviceName: "/dev/sdk"
+        Ebs:
+          VolumeSize: '10'
+# Outputs: 
+  # This is also optional.
+  # Bonus points for useful outputs!
+  # for example, if you create a Load Balancer
+  # it's nice to output the URL to it here, so that we don't have to go to the console to get it.
