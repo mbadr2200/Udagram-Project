@@ -2,5 +2,9 @@
     {
         "ParameterKey":"EnvironmentName",
         "ParameterValue":"Udagram"
+    },
+    {
+        "ParameterKey":"MyIpAddress",
+        "ParameterValue":"196.159.23.164/32"
     }
 ]

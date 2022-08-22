@@ -1,6 +1,8 @@
 Parameters:
   EnvironmentName:
     Type: String
+  MyIpAddress:
+    Type: String
 Resources:
   # Creating Security Groups
   LBSecGroup:
@@ -35,11 +37,6 @@ Resources:
         FromPort: 80
         ToPort: 80
         CidrIp: 0.0.0.0/0
-      # TODO:  We will replace it with jump box (bastion server)
-      # - IpProtocol: tcp
-      #   FromPort: 22
-      #   ToPort: 22
-      #   CidrIp: 0.0.0.0/0
       SecurityGroupEgress:
       - IpProtocol: tcp
         FromPort: 0
@@ -48,7 +45,27 @@ Resources:
       Tags:
         - Key: Name 
           Value: !Sub ${EnvironmentName} Servers Security Group
-
+  BastionServerSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH from Public to bastion server
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${EnvironmentName}-VPCID"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: !Ref MyIpAddress
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 0
+        ToPort: 65535
+        CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name 
+          Value: !Sub ${EnvironmentName} Bastion Servers Security Group
+  
   #launch configuration
   WebAppLaunchConfig:
     Type: AWS::AutoScaling::LaunchConfiguration
@@ -71,7 +88,36 @@ Resources:
       - DeviceName: "/dev/sdk"
         Ebs:
           VolumeSize: '10'
+# Bastion Server 
+  BastionServer1:
+    Type: AWS::EC2::Instance
+    Properties:
+      KeyName: udagram-bastionServerKey	
+      ImageId: ami-090fa75af13c156b4
+      SecurityGroupIds:
+      - !GetAtt BastionServerSecGroup.GroupId
+      InstanceType: t2.micro
+      SubnetId: 
+        Fn::ImportValue:
+          !Sub "${EnvironmentName}-PUB1-SN"
+      Tags:
+        - Key: Name 
+          Value: !Sub ${EnvironmentName} Bastion Server 1     
 
+  BastionServer2:
+    Type: AWS::EC2::Instance
+    Properties:
+      KeyName: udagram-bastionServerKey	
+      ImageId: ami-090fa75af13c156b4
+      InstanceType: t2.micro
+      SecurityGroupIds:
+      - !GetAtt BastionServerSecGroup.GroupId
+      SubnetId: 
+        Fn::ImportValue:
+          !Sub "${EnvironmentName}-PUB2-SN"
+      Tags:
+        - Key: Name 
+          Value: !Sub ${EnvironmentName} Bastion Server 2
   # Creating the autoscaling group
   WebAppGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
@@ -81,11 +127,83 @@ Resources:
           !Sub "${EnvironmentName}-PRIV-NETS"
       LaunchConfigurationName:
         Ref: WebAppLaunchConfig
-      MinSize: '2'
-      MaxSize: '4'
+      MinSize: '4'
+      MaxSize: '8'
       TargetGroupARNs:
       - Ref: WebAppTargetGroup
-# Outputs: 
+
+
+  # First Creating the Target group 
+  WebAppTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 8
+      HealthyThresholdCount: 2
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 5
+      VpcId: 
+        Fn::ImportValue:
+          Fn::Sub: "${EnvironmentName}-VPCID"
+
+  # Creating the load balancer 
+  WebAppLB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Subnets:
+      - Fn::ImportValue: !Sub "${EnvironmentName}-PUB1-SN"
+      - Fn::ImportValue: !Sub "${EnvironmentName}-PUB2-SN"
+      SecurityGroups:
+      - Ref: LBSecGroup
+
+  # Create Listener for the load balancer 
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: forward
+        TargetGroupArn:
+          Ref: WebAppTargetGroup
+      LoadBalancerArn:
+        Ref: WebAppLB
+      Port: '80'
+      Protocol: HTTP
+
+  # Create rule for the listener 
+  ALBListenerRule:
+      Type: AWS::ElasticLoadBalancingV2::ListenerRule
+      Properties:
+        Actions:
+        - Type: forward
+          TargetGroupArn: !Ref 'WebAppTargetGroup'
+        Conditions:
+        - Field: path-pattern
+          Values: [/]
+        ListenerArn: !Ref 'Listener'
+        Priority: 1
+Outputs: 
+  WebAppLB: 
+      Description: A reference to the Created Load Balancer
+      Value: 
+        !Sub
+          - http://${loadBalanceUrl}
+          - loadBalanceUrl : !GetAtt WebAppLB.DNSName
+      Export:
+        Name: !Sub ${EnvironmentName}-WebAppLB
+  BastionServer1:
+    Description: Bastion Server 1 Public Ip
+    Value: !GetAtt BastionServer1.PublicIp
+    Export:
+      Name: !Sub ${EnvironmentName}-BastionServer1
+  BastionServer2:
+    Description: Bastion Server 2 Public Ip
+    Value: !GetAtt BastionServer2.PublicIp
+    Export:
+      Name: !Sub ${EnvironmentName}-BastionServer2
+
   # This is also optional.
   # Bonus points for useful outputs!
   # for example, if you create a Load Balancer
