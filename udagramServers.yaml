@@ -80,7 +80,6 @@ Resources:
           #TODO: To be replaced with fetching the data from s3 bucket 
           echo "it works! Udagram, Udacity" > index.html
       ImageId: ami-0729e439b6769d6ab
-      KeyName: udagramServersKey
       SecurityGroups:
       - Ref: WebServerSecGroup
       InstanceType: t3.medium
@@ -92,7 +91,6 @@ Resources:
   BastionServer1:
     Type: AWS::EC2::Instance
     Properties:
-      KeyName: udagram-bastionServerKey	
       ImageId: ami-090fa75af13c156b4
       SecurityGroupIds:
       - !GetAtt BastionServerSecGroup.GroupId
@@ -107,7 +105,6 @@ Resources:
   BastionServer2:
     Type: AWS::EC2::Instance
     Properties:
-      KeyName: udagram-bastionServerKey	
       ImageId: ami-090fa75af13c156b4
       InstanceType: t2.micro
       SecurityGroupIds:
