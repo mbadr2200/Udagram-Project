@@ -1,0 +1,18 @@
+{
+  "Id": "Policy1661605981163",
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Stmt1661605975907",
+      "Action": "s3:*",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Resource": "arn:aws:s3:::testbucketforcloudformation2200",
+      "Condition": {
+        "IpAddress": {
+          "aws:SourceIp": "196.159.8.118/24"
+        }
+      }
+    }
+  ]
+}
